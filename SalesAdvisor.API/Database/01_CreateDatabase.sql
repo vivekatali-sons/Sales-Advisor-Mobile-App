@@ -1,9 +1,9 @@
 -- Create Database
-IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'SalesAdvisorDB')
+IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'AIIM_Mobile')
 BEGIN
-    CREATE DATABASE [SalesAdvisorDB]
+    CREATE DATABASE [AIIM_Mobile]
 END
 GO
 
-USE [SalesAdvisorDB]
+USE [AIIM_Mobile]
 GO

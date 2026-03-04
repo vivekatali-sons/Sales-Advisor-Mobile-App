@@ -34,4 +34,18 @@ public class IncentiveController : ControllerBase
         var result = await _incService.GetYtdAsync(advisorId, year);
         return Ok(result);
     }
+
+    [HttpGet("byproduct/{advisorId:int}")]
+    public async Task<IActionResult> GetByProduct(int advisorId, [FromQuery] int? year = null, [FromQuery] int? month = null)
+    {
+        var result = await _incService.GetByProductAsync(advisorId, year, month);
+        return Ok(result);
+    }
+
+    [HttpGet("bycampaign/{advisorId:int}")]
+    public async Task<IActionResult> GetByCampaign(int advisorId, [FromQuery] int? year = null, [FromQuery] int? month = null)
+    {
+        var result = await _incService.GetByCampaignAsync(advisorId, year, month);
+        return Ok(result);
+    }
 }

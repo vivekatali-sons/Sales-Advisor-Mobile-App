@@ -1,10 +1,10 @@
-USE [SalesAdvisorDB]
+USE [AIIM_Mobile]
 GO
 
--- Seed Advisor
+-- Seed Advisor (M365 login for authentication)
 IF NOT EXISTS (SELECT * FROM SalesAdvisors WHERE EmpId = 'SA-2847')
-    INSERT INTO SalesAdvisors (EmpId, Name, Role, Branch, Avatar, PasswordHash)
-    VALUES ('SA-2847', 'Sohail Iqbal', 'Senior Sales Advisor', 'Downtown Premium', 'SI', 'password123');
+    INSERT INTO SalesAdvisors (EmpId, M365LoginId, Name, Role, Branch, Avatar)
+    VALUES ('SA-2847', 'sohail.iqbal@ali-sons.com', 'Sohail Iqbal', 'Senior Sales Advisor', 'Downtown Premium', 'SI');
 GO
 
 -- Seed Incentive Slabs
@@ -56,7 +56,7 @@ END
 GO
 
 -- Seed Transactions
-SET @AdvisorId = (SELECT Id FROM SalesAdvisors WHERE EmpId = 'SA-2847');
+DECLARE @AdvisorId INT = (SELECT Id FROM SalesAdvisors WHERE EmpId = 'SA-2847');
 
 IF NOT EXISTS (SELECT * FROM SalesTransactions WHERE AdvisorId = @AdvisorId)
 BEGIN
@@ -73,7 +73,7 @@ END
 GO
 
 -- Seed Leads
-SET @AdvisorId = (SELECT Id FROM SalesAdvisors WHERE EmpId = 'SA-2847');
+DECLARE @AdvisorId INT = (SELECT Id FROM SalesAdvisors WHERE EmpId = 'SA-2847');
 
 IF NOT EXISTS (SELECT * FROM Leads WHERE AdvisorId = @AdvisorId)
 BEGIN
@@ -93,7 +93,7 @@ END
 GO
 
 -- Seed Bonus Eligibility
-SET @AdvisorId = (SELECT Id FROM SalesAdvisors WHERE EmpId = 'SA-2847');
+DECLARE @AdvisorId INT = (SELECT Id FROM SalesAdvisors WHERE EmpId = 'SA-2847');
 
 IF NOT EXISTS (SELECT * FROM BonusEligibility WHERE AdvisorId = @AdvisorId AND [Year] = 2025 AND [Month] = 9)
 BEGIN

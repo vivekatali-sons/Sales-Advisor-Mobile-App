@@ -17,6 +17,7 @@ builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<ILeadsRepository, LeadsRepository>();
 builder.Services.AddScoped<ITransactionsRepository, TransactionsRepository>();
 builder.Services.AddScoped<IIncentiveRepository, IncentiveRepository>();
+builder.Services.AddScoped<IPerformanceRepository, PerformanceRepository>();
 
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -24,6 +25,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ILeadsService, LeadsService>();
 builder.Services.AddScoped<ITransactionsService, TransactionsService>();
 builder.Services.AddScoped<IIncentiveService, IncentiveService>();
+builder.Services.AddScoped<IPerformanceService, PerformanceService>();
 
 // Controllers + CORS
 builder.Services.AddControllers();

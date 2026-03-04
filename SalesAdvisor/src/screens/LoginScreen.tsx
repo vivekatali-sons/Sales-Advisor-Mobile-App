@@ -7,6 +7,8 @@ import {
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, borderRadius, shadows } from '../theme';
+import { authApi } from '../api/client';
+import { useApp } from '../context/AppContext';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 // iPhone SE = 568, iPhone 8 = 667, iPhone 12+ = 844+
@@ -17,12 +19,14 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
+  const { setAdvisorId } = useApp();
   const [empId, setEmpId] = useState('SA-2847');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<'empId' | 'password' | null>(null);
   const [rememberMe, setRememberMe] = useState(true);
+  const [error, setError] = useState('');
 
   const cardAnim = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
@@ -38,9 +42,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     Animated.spring(btnScale, { toValue: 1, friction: 3, useNativeDriver: true }).start();
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin(); }, 800);
+    setError('');
+    try {
+      const advisor = await authApi.login(empId, password);
+      setAdvisorId(advisor.id);
+      onLogin();
+    } catch (e: any) {
+      setError(e?.response?.data?.error || 'Login failed. Check your credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

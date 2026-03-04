@@ -1,22 +1,52 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { colors, borderRadius } from '../theme';
 import { Card } from '../components/cards/Card';
 import { SectionTitle } from '../components/common/SectionTitle';
-import { transactions } from '../store/mockData';
+import { useApp } from '../context/AppContext';
+import { transactionsApi } from '../api/client';
 import { formatFull, formatCompact } from '../utils/formatters';
+import type { Transaction } from '../types';
 
 export const TransactionsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const total = transactions.reduce((s, t) => s + t.amount, 0);
-  const avg = Math.round(total / transactions.length);
+  const { state: { advisorId, year, month } } = useApp();
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await transactionsApi.getAll(advisorId, year, month);
+      setTransactions(data);
+    } catch (err) {
+      console.error('TransactionsScreen fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisorId, year, month]);
+
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, []);
+
+  if (loading || transactions.length === 0) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const total = transactions.reduce((s, t) => s + t.amount, 0);
+  const avg = Math.round(total / transactions.length);
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>

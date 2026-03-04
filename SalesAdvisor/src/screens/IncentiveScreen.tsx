@@ -1,6 +1,7 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { colors, borderRadius } from '../theme';
 import { Card } from '../components/cards/Card';
@@ -9,17 +10,57 @@ import { Badge } from '../components/common/Badge';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { DonutChart } from '../components/charts/DonutChart';
 import { SectionTitle } from '../components/common/SectionTitle';
-import { advisor, byProduct, byCampaign, bonusEligibility } from '../store/mockData';
+import { useApp } from '../context/AppContext';
+import { dashboardApi, incentiveApi } from '../api/client';
 import { formatFull } from '../utils/formatters';
+import type { Advisor, ProductBreakdown, CampaignBreakdown, BonusEligibility } from '../types';
 
 export const IncentiveScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const maxCampaign = Math.max(...byCampaign.map((c) => c.value));
+  const { state: { advisorId, year, month, monthName } } = useApp();
+
+  const [advisor, setAdvisor] = useState<Advisor | null>(null);
+  const [byProduct, setByProduct] = useState<ProductBreakdown[]>([]);
+  const [byCampaign, setByCampaign] = useState<CampaignBreakdown[]>([]);
+  const [bonusEligibility, setBonusEligibility] = useState<BonusEligibility[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [adv, products, campaigns, eligibility] = await Promise.all([
+        dashboardApi.get(advisorId, year, month),
+        incentiveApi.getByProduct(advisorId, year, month),
+        incentiveApi.getByCampaign(advisorId, year, month),
+        incentiveApi.getEligibility(advisorId, year, month),
+      ]);
+      setAdvisor(adv);
+      setByProduct(products);
+      setByCampaign(campaigns);
+      setBonusEligibility(eligibility);
+    } catch (err) {
+      console.error('IncentiveScreen fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisorId, year, month]);
+
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, []);
+
+  if (loading || !advisor) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const maxCampaign = byCampaign.length > 0 ? Math.max(...byCampaign.map((c) => c.value)) : 1;
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -33,7 +74,7 @@ export const IncentiveScreen: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Card style={{ alignItems: 'center', padding: 24 }}>
-          <Text style={styles.incLabel}>SEPTEMBER ESTIMATED INCENTIVE</Text>
+          <Text style={styles.incLabel}>{monthName.toUpperCase()} ESTIMATED INCENTIVE</Text>
           <AnimatedNumber value={advisor.incentive} prefix="AED " style={styles.incAmount} />
           <View style={{ marginTop: 10 }}>
             <Badge status="Almost Eligible" />
@@ -44,8 +85,8 @@ export const IncentiveScreen: React.FC = () => {
         <Card style={{ padding: 14, backgroundColor: colors.primary + '04' }}>
           <Text style={styles.formulaTitle}>CALCULATION FORMULA</Text>
           <View style={styles.formulaBox}>
-            <Text style={styles.formulaMono}>(Base AED 12,000 x 1.25) + AED 3,450</Text>
-            <Text style={styles.formulaResult}>= AED 18,450</Text>
+            <Text style={styles.formulaMono}>(Base AED {formatFull(advisor.base)} x {advisor.multiplier}) + AED {formatFull(advisor.bonuses)}</Text>
+            <Text style={styles.formulaResult}>= AED {formatFull(advisor.incentive)}</Text>
           </View>
         </Card>
 

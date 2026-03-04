@@ -1,9 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Animated,
+  StyleSheet, Animated, ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, shadows, spacing, borderRadius } from '../theme';
@@ -15,25 +15,65 @@ import { TempIndicator } from '../components/common/TempIndicator';
 import { Sparkline } from '../components/charts/Sparkline';
 import { BarChart } from '../components/charts/BarChart';
 import { SectionTitle } from '../components/common/SectionTitle';
-import { advisor, leads, dailyData, ytdData } from '../store/mockData';
 import { formatCompact, formatFull, calcPercent } from '../utils/formatters';
+import { useApp } from '../context/AppContext';
+import { dashboardApi, leadsApi, performanceApi, incentiveApi } from '../api/client';
+import type { Advisor, Lead, DayData, YTDMonth } from '../types';
 
 export const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const pct = calcPercent(advisor.achieved, advisor.monthlyTarget);
-  const hotCount = leads.filter((l) => l.temperature === 'hot').length;
-  const warmCount = leads.filter((l) => l.temperature === 'warm').length;
-  const coldCount = leads.filter((l) => l.temperature === 'cold').length;
-  const pipelineValue = leads.reduce((s, l) => s + l.value, 0);
+  const { state: { advisorId, year, month, monthName } } = useApp();
+
+  const [advisor, setAdvisor] = useState<Advisor | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [dailyData, setDailyData] = useState<DayData[]>([]);
+  const [ytdData, setYtdData] = useState<YTDMonth[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [adv, lds, daily, ytd] = await Promise.all([
+        dashboardApi.get(advisorId, year, month),
+        leadsApi.getAll(advisorId),
+        performanceApi.getDaily(advisorId, year, month),
+        incentiveApi.getYTD(advisorId, year),
+      ]);
+      const ytdTotal = ytd.reduce((s, d) => s + d.incentive, 0);
+      setAdvisor({ ...adv, ytdIncentive: ytdTotal });
+      setLeads(lds);
+      setDailyData(daily);
+      setYtdData(ytd);
+    } catch (e) {
+      console.error('Dashboard fetch error', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisorId, year, month]);
+
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, []);
 
+  if (loading || !advisor) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const pct = calcPercent(advisor.achieved, advisor.monthlyTarget);
+  const hotCount = leads.filter((l) => l.temperature === 'hot').length;
+  const warmCount = leads.filter((l) => l.temperature === 'warm').length;
+  const coldCount = leads.filter((l) => l.temperature === 'cold').length;
+  const pipelineValue = leads.reduce((s, l) => s + l.value, 0);
+
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.avatar}>
@@ -45,7 +85,7 @@ export const DashboardScreen: React.FC = () => {
           </View>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity style={styles.iconBtn} onPress={fetchData}>
             <Feather name="refresh-cw" size={15} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn}>
@@ -55,12 +95,7 @@ export const DashboardScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Alert Banner - corporate tone */}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.alertBanner}>
           <Feather name="trending-up" size={16} color={colors.accent} />
           <Text style={styles.alertText}>
@@ -68,28 +103,13 @@ export const DashboardScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Hero Card */}
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Performance')}
-          activeOpacity={0.85}
-        >
-          <LinearGradient
-            colors={['#1B4D3E', '#234E42']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroCard}
-          >
+        <TouchableOpacity onPress={() => navigation.navigate('Performance')} activeOpacity={0.85}>
+          <LinearGradient colors={['#1B4D3E', '#234E42']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
             <View style={styles.heroTop}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.heroLabel}>SEPTEMBER TARGET</Text>
-                <AnimatedNumber
-                  value={advisor.achieved}
-                  prefix="AED "
-                  style={styles.heroAmount}
-                />
-                <Text style={styles.heroSubtext}>
-                  of AED {formatFull(advisor.monthlyTarget)}
-                </Text>
+                <Text style={styles.heroLabel}>{monthName.toUpperCase()} TARGET</Text>
+                <AnimatedNumber value={advisor.achieved} prefix="AED " style={styles.heroAmount} />
+                <Text style={styles.heroSubtext}>of AED {formatFull(advisor.monthlyTarget)}</Text>
               </View>
               <CircularProgress pct={pct} size={68} strokeWidth={5} color={colors.accent}>
                 <Text style={styles.heroPct}>{pct}%</Text>
@@ -107,7 +127,6 @@ export const DashboardScreen: React.FC = () => {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <Card onPress={() => navigation.navigate('Incentive')} style={styles.statCard}>
             <View style={styles.statHeader}>
@@ -122,7 +141,6 @@ export const DashboardScreen: React.FC = () => {
               <Text style={styles.statChange}>+12% vs Aug</Text>
             </View>
           </Card>
-
           <Card onPress={() => navigation.navigate('YTD')} style={styles.statCard}>
             <View style={styles.statHeader}>
               <View style={[styles.statIcon, { backgroundColor: colors.primary + '10' }]}>
@@ -137,7 +155,6 @@ export const DashboardScreen: React.FC = () => {
           </Card>
         </View>
 
-        {/* Leads Card */}
         <Card onPress={() => navigation.navigate('LeadsTab')}>
           <View style={styles.leadsRow}>
             <View style={styles.leadsLeft}>
@@ -150,7 +167,7 @@ export const DashboardScreen: React.FC = () => {
               </View>
             </View>
             <View style={styles.leadsRight}>
-              <Text style={styles.leadsCount}>12</Text>
+              <Text style={styles.leadsCount}>{leads.length}</Text>
               <Feather name="chevron-right" size={18} color={colors.textMuted} />
             </View>
           </View>
@@ -164,7 +181,6 @@ export const DashboardScreen: React.FC = () => {
           </View>
         </Card>
 
-        {/* Simulator CTA */}
         <Card onPress={() => navigation.navigate('SimulatorTab')} style={styles.simCard}>
           <View style={styles.simRow}>
             <View style={styles.simIcon}>
@@ -178,14 +194,9 @@ export const DashboardScreen: React.FC = () => {
           </View>
         </Card>
 
-        {/* Weekly Activity */}
         <SectionTitle title="This Week's Activity" />
         <Card style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-          <BarChart
-            data={dailyData.map((d) => ({ label: d.day, value: d.value }))}
-            height={120}
-            highlightIndex={5}
-          />
+          <BarChart data={dailyData.map((d) => ({ label: d.day, value: d.value }))} height={120} highlightIndex={5} />
         </Card>
 
         <View style={{ height: 16 }} />
@@ -196,44 +207,20 @@ export const DashboardScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatar: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
-  },
+  avatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   greeting: { fontSize: 15, fontWeight: '600', color: colors.text },
   role: { fontSize: 11, color: colors.textTertiary, marginTop: 1 },
   headerRight: { flexDirection: 'row', gap: 6 },
-  iconBtn: {
-    width: 36, height: 36, borderRadius: borderRadius.md,
-    borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center',
-  },
-  notifDot: {
-    position: 'absolute', top: 7, right: 7,
-    width: 6, height: 6, borderRadius: 3,
-    backgroundColor: colors.danger, borderWidth: 1.5, borderColor: '#fff',
-  },
+  iconBtn: { width: 36, height: 36, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  notifDot: { position: 'absolute', top: 7, right: 7, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: '#fff' },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 16 },
-
-  alertBanner: {
-    backgroundColor: colors.accent + '0C',
-    borderRadius: borderRadius.md, padding: 12, paddingHorizontal: 14,
-    marginBottom: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    borderWidth: 1, borderColor: colors.accent + '20',
-  },
+  alertBanner: { backgroundColor: colors.accent + '0C', borderRadius: borderRadius.md, padding: 12, paddingHorizontal: 14, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: colors.accent + '20' },
   alertText: { fontSize: 12, flex: 1, lineHeight: 18, color: colors.textSecondary },
-
-  heroCard: {
-    borderRadius: borderRadius.xxl, padding: 20, marginBottom: 12,
-  },
+  heroCard: { borderRadius: borderRadius.xxl, padding: 20, marginBottom: 12 },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
   heroLabel: { fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: '600', letterSpacing: 1.2, marginBottom: 6 },
   heroAmount: { fontSize: 28, fontWeight: '700', color: '#fff', letterSpacing: -0.5 },
@@ -243,7 +230,6 @@ const styles = StyleSheet.create({
   heroRangeText: { fontSize: 10, color: 'rgba(255,255,255,0.35)' },
   heroArrow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 6 },
   heroArrowText: { fontSize: 11, color: 'rgba(255,255,255,0.45)', fontWeight: '500' },
-
   statsGrid: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   statCard: { flex: 1, padding: 14 },
   statHeader: { marginBottom: 8 },
@@ -252,7 +238,6 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '700', color: colors.primary, letterSpacing: -0.3 },
   statChangeRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   statChange: { fontSize: 11, color: colors.success, fontWeight: '500' },
-
   leadsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   leadsLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   leadsIcon: { width: 40, height: 40, borderRadius: borderRadius.md, backgroundColor: colors.primaryLight + '10', alignItems: 'center', justifyContent: 'center' },
@@ -260,14 +245,9 @@ const styles = StyleSheet.create({
   leadsSub: { fontSize: 11, color: colors.textTertiary },
   leadsRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   leadsCount: { fontSize: 24, fontWeight: '700', color: colors.primary },
-
   tempRow: { flexDirection: 'row', gap: 6, marginTop: 12, alignItems: 'center' },
   tempText: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
-
-  simCard: {
-    backgroundColor: colors.accent + '06',
-    borderColor: colors.accent + '18',
-  },
+  simCard: { backgroundColor: colors.accent + '06', borderColor: colors.accent + '18' },
   simRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   simIcon: { width: 40, height: 40, borderRadius: borderRadius.md, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   simTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },

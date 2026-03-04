@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { colors, borderRadius } from '../theme';
 import { Card } from '../components/cards/Card';
@@ -9,20 +10,54 @@ import { ProgressBar } from '../components/common/ProgressBar';
 import { AreaChart } from '../components/charts/AreaChart';
 import { Chip } from '../components/common/Chip';
 import { SectionTitle } from '../components/common/SectionTitle';
-import { ytdData, prevYearData } from '../store/mockData';
+import { useApp } from '../context/AppContext';
+import { incentiveApi } from '../api/client';
 import { formatFull, formatCompact, calcPercent } from '../utils/formatters';
+import type { YTDMonth } from '../types';
 
 export const YTDScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { state: { advisorId, year } } = useApp();
+
+  const [ytdData, setYtdData] = useState<YTDMonth[]>([]);
+  const [prevYearData, setPrevYearData] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [showPrev, setShowPrev] = useState(false);
-  const total = ytdData.reduce((s, d) => s + d.incentive, 0);
-  const selectedData = selectedMonth ? ytdData.find((d) => d.month === selectedMonth) : null;
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [currentYtd, prevYtd] = await Promise.all([
+        incentiveApi.getYTD(advisorId, year),
+        incentiveApi.getYTD(advisorId, year - 1),
+      ]);
+      setYtdData(currentYtd);
+      setPrevYearData(prevYtd.map((d) => d.incentive));
+    } catch (err) {
+      console.error('YTDScreen fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisorId, year]);
+
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, []);
+
+  if (loading || ytdData.length === 0) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const total = ytdData.reduce((s, d) => s + d.incentive, 0);
+  const selectedData = selectedMonth ? ytdData.find((d) => d.month === selectedMonth) : null;
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -36,7 +71,7 @@ export const YTDScreen: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Card style={{ alignItems: 'center', padding: 24 }}>
-          <Text style={styles.totalLabel}>TOTAL YTD INCENTIVE 2025</Text>
+          <Text style={styles.totalLabel}>TOTAL YTD INCENTIVE {year}</Text>
           <AnimatedNumber value={total} prefix="AED " style={styles.totalAmount} />
           <View style={styles.changeRow}>
             <Feather name="trending-up" size={13} color={colors.success} />
@@ -46,7 +81,7 @@ export const YTDScreen: React.FC = () => {
 
         <View style={styles.chartHeader}>
           <SectionTitle title="Monthly Trend" />
-          <Chip label={showPrev ? 'Hide 2024' : 'Show 2024'} active={showPrev} onPress={() => setShowPrev(!showPrev)} />
+          <Chip label={showPrev ? `Hide ${year - 1}` : `Show ${year - 1}`} active={showPrev} onPress={() => setShowPrev(!showPrev)} />
         </View>
         <Card style={{ paddingHorizontal: 8, paddingVertical: 14 }}>
           <AreaChart
@@ -60,7 +95,7 @@ export const YTDScreen: React.FC = () => {
         {selectedData && (
           <Card style={styles.detailCard}>
             <View style={styles.detailHeader}>
-              <Text style={styles.detailTitle}>{selectedData.month} 2025</Text>
+              <Text style={styles.detailTitle}>{selectedData.month} {year}</Text>
               <TouchableOpacity onPress={() => setSelectedMonth(null)}>
                 <Feather name="x" size={16} color={colors.textTertiary} />
               </TouchableOpacity>

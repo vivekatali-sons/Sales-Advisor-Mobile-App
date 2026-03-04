@@ -15,9 +15,9 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("{advisorId:int}")]
-    public async Task<IActionResult> GetDashboard(int advisorId)
+    public async Task<IActionResult> GetDashboard(int advisorId, [FromQuery] int? year = null, [FromQuery] int? month = null)
     {
-        var result = await _dashService.GetDashboardAsync(advisorId);
+        var result = await _dashService.GetDashboardAsync(advisorId, year, month);
         if (!result.Success)
             return NotFound(result);
 

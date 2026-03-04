@@ -4,5 +4,5 @@ namespace SalesAdvisor.API.Repositories;
 
 public interface IAuthRepository
 {
-    Task<SalesAdvisorEntity?> AuthenticateAsync(string empId, string password);
+    Task<SalesAdvisorEntity?> GetByLoginIdAsync(string loginId);
 }

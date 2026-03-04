@@ -14,9 +14,10 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
-        var advisor = await _authRepo.AuthenticateAsync(request.EmpId, request.Password);
+        // TODO: Integrate M365 auth via Usman — for now, DB lookup only
+        var advisor = await _authRepo.GetByLoginIdAsync(request.LoginId);
         if (advisor == null)
-            return new LoginResponse(false, null, "Invalid credentials");
+            return new LoginResponse(false, null, "User not found");
 
         return new LoginResponse(true, new AdvisorDto(
             advisor.Id, advisor.EmpId, advisor.Name,

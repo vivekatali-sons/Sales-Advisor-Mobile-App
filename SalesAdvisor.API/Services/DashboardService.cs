@@ -12,10 +12,10 @@ public class DashboardService : IDashboardService
         _dashRepo = dashRepo;
     }
 
-    public async Task<ApiResponse<DashboardResponse>> GetDashboardAsync(int advisorId)
+    public async Task<ApiResponse<DashboardResponse>> GetDashboardAsync(int advisorId, int? year = null, int? month = null)
     {
         var now = DateTime.Now;
-        var data = await _dashRepo.GetDashboardDataAsync(advisorId, now.Year, now.Month);
+        var data = await _dashRepo.GetDashboardDataAsync(advisorId, year ?? now.Year, month ?? now.Month);
         if (data == null)
             return new ApiResponse<DashboardResponse>(false, null, "Advisor not found");
 

@@ -1,18 +1,50 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, borderRadius } from '../theme';
 import { Card } from '../components/cards/Card';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { TempIndicator } from '../components/common/TempIndicator';
 import { Chip } from '../components/common/Chip';
-import { leads } from '../store/mockData';
+import { useApp } from '../context/AppContext';
+import { leadsApi } from '../api/client';
 import { formatFull, formatCompact } from '../utils/formatters';
 import type { Lead, LeadTemperature } from '../types';
 
 export const LeadsScreen: React.FC = () => {
+  const { state: { advisorId } } = useApp();
+
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | LeadTemperature>('all');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await leadsApi.getAll(advisorId);
+      setLeads(data);
+    } catch (err) {
+      console.error('LeadsScreen fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisorId]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+  }, []);
+
+  if (loading || leads.length === 0) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   const filtered = filter === 'all' ? leads : leads.filter((l) => l.temperature === filter);
   const totalPipeline = leads.reduce((s, l) => s + l.value, 0);
@@ -24,11 +56,6 @@ export const LeadsScreen: React.FC = () => {
     { key: 'warm', label: `Warm (${leads.filter((l) => l.temperature === 'warm').length})` },
     { key: 'cold', label: `Cold (${leads.filter((l) => l.temperature === 'cold').length})` },
   ];
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-  }, []);
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>

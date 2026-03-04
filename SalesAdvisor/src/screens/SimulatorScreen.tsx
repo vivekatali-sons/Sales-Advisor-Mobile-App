@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, borderRadius, shadows } from '../theme';
@@ -7,15 +7,53 @@ import { Card } from '../components/cards/Card';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { TempIndicator } from '../components/common/TempIndicator';
 import { SectionTitle } from '../components/common/SectionTitle';
-import { advisor, leads } from '../store/mockData';
+import { useApp } from '../context/AppContext';
+import { dashboardApi, leadsApi } from '../api/client';
 import { formatFull, formatCompact, calcPercent, getMultiplier } from '../utils/formatters';
+import type { Advisor, Lead } from '../types';
 
 export const SimulatorScreen: React.FC = () => {
+  const { state: { advisorId, year, month } } = useApp();
+
+  const [advisor, setAdvisor] = useState<Advisor | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Record<number, boolean>>({});
 
   const toggle = (id: number) => {
     setSelected((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [adv, leadsData] = await Promise.all([
+        dashboardApi.get(advisorId, year, month),
+        leadsApi.getAll(advisorId),
+      ]);
+      setAdvisor(adv);
+      setLeads(leadsData);
+    } catch (err) {
+      console.error('SimulatorScreen fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisorId, year, month]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+  }, []);
+
+  if (loading || !advisor) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   const picked = leads.filter((l) => selected[l.id]);
   const addVal = picked.reduce((s, l) => s + l.value, 0);
@@ -28,11 +66,6 @@ export const SimulatorScreen: React.FC = () => {
   const newInc = Math.round(advisor.base * newMult + advisor.bonuses + addComm);
   const gain = newInc - advisor.incentive;
   const count = picked.length;
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-  }, []);
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>

@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { colors, borderRadius } from '../theme';
 import { Card } from '../components/cards/Card';
@@ -10,20 +11,61 @@ import { BarChart } from '../components/charts/BarChart';
 import { AreaChart } from '../components/charts/AreaChart';
 import { Chip } from '../components/common/Chip';
 import { SectionTitle } from '../components/common/SectionTitle';
-import { advisor, weeklyData, dailyData, incentiveSlabs } from '../store/mockData';
+import { useApp } from '../context/AppContext';
+import { dashboardApi, performanceApi, incentiveApi } from '../api/client';
 import { formatCompact, formatFull, calcPercent } from '../utils/formatters';
+import type { Advisor, WeekData, DayData, IncentiveSlab } from '../types';
 
 export const PerformanceScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const pct = calcPercent(advisor.achieved, advisor.monthlyTarget);
-  const gap = advisor.monthlyTarget - advisor.achieved;
+  const { state: { advisorId, year, month } } = useApp();
+
+  const [advisor, setAdvisor] = useState<Advisor | null>(null);
+  const [weeklyData, setWeeklyData] = useState<WeekData[]>([]);
+  const [dailyData, setDailyData] = useState<DayData[]>([]);
+  const [incentiveSlabs, setIncentiveSlabs] = useState<IncentiveSlab[]>([]);
+  const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'weekly' | 'daily'>('weekly');
-  const pctColor = pct >= 80 ? colors.success : pct >= 60 ? colors.warning : colors.danger;
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [adv, weekly, daily] = await Promise.all([
+        dashboardApi.get(advisorId, year, month),
+        performanceApi.getWeekly(advisorId, year, month),
+        performanceApi.getDaily(advisorId, year, month),
+      ]);
+      const pct = calcPercent(adv.achieved, adv.monthlyTarget);
+      const slabs = await incentiveApi.getSlabs(pct);
+      setAdvisor(adv);
+      setWeeklyData(weekly);
+      setDailyData(daily);
+      setIncentiveSlabs(slabs);
+    } catch (err) {
+      console.error('PerformanceScreen fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisorId, year, month]);
+
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, []);
+
+  if (loading || !advisor) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const pct = calcPercent(advisor.achieved, advisor.monthlyTarget);
+  const gap = advisor.monthlyTarget - advisor.achieved;
+  const pctColor = pct >= 80 ? colors.success : pct >= 60 ? colors.warning : colors.danger;
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>

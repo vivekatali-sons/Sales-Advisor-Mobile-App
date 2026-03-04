@@ -42,4 +42,24 @@ public class IncentiveRepository : IIncentiveRepository
             commandType: CommandType.StoredProcedure
         );
     }
+
+    public async Task<IEnumerable<dynamic>> GetSalesByProductAsync(int advisorId, int year, int month)
+    {
+        using var conn = _db.CreateConnection();
+        return await conn.QueryAsync(
+            "sp_GetSalesByProduct",
+            new { AdvisorId = advisorId, Year = year, Month = month },
+            commandType: CommandType.StoredProcedure
+        );
+    }
+
+    public async Task<IEnumerable<dynamic>> GetSalesByCampaignAsync(int advisorId, int year, int month)
+    {
+        using var conn = _db.CreateConnection();
+        return await conn.QueryAsync(
+            "sp_GetSalesByCampaign",
+            new { AdvisorId = advisorId, Year = year, Month = month },
+            commandType: CommandType.StoredProcedure
+        );
+    }
 }

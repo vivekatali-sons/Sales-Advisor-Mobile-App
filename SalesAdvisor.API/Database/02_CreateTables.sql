@@ -1,4 +1,4 @@
-USE [SalesAdvisorDB]
+USE [AIIM_Mobile]
 GO
 
 -- Sales Advisors
@@ -6,11 +6,11 @@ IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SalesAdvisors')
 CREATE TABLE SalesAdvisors (
     Id INT IDENTITY(1,1) PRIMARY KEY,
     EmpId NVARCHAR(20) UNIQUE NOT NULL,
+    M365LoginId NVARCHAR(150) UNIQUE NOT NULL,
     Name NVARCHAR(100) NOT NULL,
     Role NVARCHAR(50) NOT NULL,
     Branch NVARCHAR(100) NOT NULL,
     Avatar NVARCHAR(10) NOT NULL,
-    PasswordHash NVARCHAR(255) NOT NULL,
     IsActive BIT DEFAULT 1,
     CreatedAt DATETIME DEFAULT GETDATE()
 );

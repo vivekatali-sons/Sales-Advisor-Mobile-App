@@ -1,4 +1,4 @@
-USE [SalesAdvisorDB]
+USE [AIIM_Mobile]
 GO
 
 -- =============================================
@@ -9,16 +9,14 @@ IF EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = 'sp_Authenticat
 GO
 
 CREATE PROCEDURE sp_AuthenticateAdvisor
-    @EmpId NVARCHAR(20),
-    @Password NVARCHAR(255)
+    @LoginId NVARCHAR(150)
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT Id, EmpId, Name, Role, Branch, Avatar, PasswordHash, IsActive, CreatedAt
+    SELECT Id, EmpId, M365LoginId, Name, Role, Branch, Avatar, IsActive, CreatedAt
     FROM SalesAdvisors
-    WHERE EmpId = @EmpId
-      AND PasswordHash = @Password
+    WHERE (M365LoginId = @LoginId OR EmpId = @LoginId)
       AND IsActive = 1;
 END
 GO
@@ -228,5 +226,150 @@ BEGIN
       AND mt.[Year] = @Year
     GROUP BY mt.[Month], mt.TargetAmount, mt.BaseIncentive
     ORDER BY mt.[Month];
+END
+GO
+
+-- =============================================
+-- sp_GetWeeklyPerformance
+-- Weekly target vs achieved for a given month
+-- =============================================
+IF EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = 'sp_GetWeeklyPerformance')
+    DROP PROCEDURE sp_GetWeeklyPerformance
+GO
+
+CREATE PROCEDURE sp_GetWeeklyPerformance
+    @AdvisorId INT,
+    @Year INT,
+    @Month INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @TargetAmount DECIMAL(18,2) = 0;
+
+    SELECT @TargetAmount = ISNULL(TargetAmount, 0)
+    FROM MonthlyTargets
+    WHERE AdvisorId = @AdvisorId AND [Year] = @Year AND [Month] = @Month;
+
+    -- Split month into 4 weeks and calculate per-week target & achieved
+    ;WITH Weeks AS (
+        SELECT 1 AS WeekNum, 1 AS StartDay, 7 AS EndDay
+        UNION ALL SELECT 2, 8, 14
+        UNION ALL SELECT 3, 15, 21
+        UNION ALL SELECT 4, 22, 31
+    )
+    SELECT
+        'W' + CAST(w.WeekNum AS VARCHAR) AS [Week],
+        ROUND(@TargetAmount / 4.0, 0) AS Target,
+        ISNULL(SUM(st.Amount), 0) AS Achieved
+    FROM Weeks w
+    LEFT JOIN SalesTransactions st
+        ON st.AdvisorId = @AdvisorId
+        AND YEAR(st.TransactionDate) = @Year
+        AND MONTH(st.TransactionDate) = @Month
+        AND DAY(st.TransactionDate) BETWEEN w.StartDay AND w.EndDay
+    GROUP BY w.WeekNum
+    ORDER BY w.WeekNum;
+END
+GO
+
+-- =============================================
+-- sp_GetDailyPerformance
+-- Daily sales by day-of-week for a given month
+-- =============================================
+IF EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = 'sp_GetDailyPerformance')
+    DROP PROCEDURE sp_GetDailyPerformance
+GO
+
+CREATE PROCEDURE sp_GetDailyPerformance
+    @AdvisorId INT,
+    @Year INT,
+    @Month INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    ;WITH DayNames AS (
+        SELECT 1 AS DayNum, 'Sun' AS DayName
+        UNION ALL SELECT 2, 'Mon'
+        UNION ALL SELECT 3, 'Tue'
+        UNION ALL SELECT 4, 'Wed'
+        UNION ALL SELECT 5, 'Thu'
+        UNION ALL SELECT 6, 'Fri'
+        UNION ALL SELECT 7, 'Sat'
+    )
+    SELECT
+        d.DayName AS [Day],
+        ISNULL(SUM(st.Amount), 0) AS [Value]
+    FROM DayNames d
+    LEFT JOIN SalesTransactions st
+        ON st.AdvisorId = @AdvisorId
+        AND YEAR(st.TransactionDate) = @Year
+        AND MONTH(st.TransactionDate) = @Month
+        AND DATEPART(WEEKDAY, st.TransactionDate) = d.DayNum
+    GROUP BY d.DayNum, d.DayName
+    ORDER BY d.DayNum;
+END
+GO
+
+-- =============================================
+-- sp_GetSalesByProduct
+-- Product category breakdown for incentive screen
+-- =============================================
+IF EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = 'sp_GetSalesByProduct')
+    DROP PROCEDURE sp_GetSalesByProduct
+GO
+
+CREATE PROCEDURE sp_GetSalesByProduct
+    @AdvisorId INT,
+    @Year INT,
+    @Month INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        pc.Name,
+        ISNULL(SUM(st.Amount), 0) AS [Value],
+        pc.Color
+    FROM ProductCategories pc
+    LEFT JOIN SalesTransactions st
+        ON st.ProductCategory = pc.Name
+        AND st.AdvisorId = @AdvisorId
+        AND YEAR(st.TransactionDate) = @Year
+        AND MONTH(st.TransactionDate) = @Month
+    GROUP BY pc.Name, pc.Color
+    ORDER BY [Value] DESC;
+END
+GO
+
+-- =============================================
+-- sp_GetSalesByCampaign
+-- Campaign breakdown for incentive screen
+-- =============================================
+IF EXISTS (SELECT * FROM sys.objects WHERE type = 'P' AND name = 'sp_GetSalesByCampaign')
+    DROP PROCEDURE sp_GetSalesByCampaign
+GO
+
+CREATE PROCEDURE sp_GetSalesByCampaign
+    @AdvisorId INT,
+    @Year INT,
+    @Month INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        c.Name,
+        ISNULL(SUM(st.Amount), 0) AS [Value]
+    FROM Campaigns c
+    LEFT JOIN SalesTransactions st
+        ON st.CampaignId = c.Id
+        AND st.AdvisorId = @AdvisorId
+        AND YEAR(st.TransactionDate) = @Year
+        AND MONTH(st.TransactionDate) = @Month
+    WHERE c.IsActive = 1
+    GROUP BY c.Name
+    ORDER BY [Value] DESC;
 END
 GO

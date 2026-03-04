@@ -14,12 +14,12 @@ public class AuthRepository : IAuthRepository
         _db = db;
     }
 
-    public async Task<SalesAdvisorEntity?> AuthenticateAsync(string empId, string password)
+    public async Task<SalesAdvisorEntity?> GetByLoginIdAsync(string loginId)
     {
         using var conn = _db.CreateConnection();
         return await conn.QueryFirstOrDefaultAsync<SalesAdvisorEntity>(
             "sp_AuthenticateAdvisor",
-            new { EmpId = empId, Password = password },
+            new { LoginId = loginId },
             commandType: CommandType.StoredProcedure
         );
     }

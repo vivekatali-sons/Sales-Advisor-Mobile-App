@@ -45,4 +45,27 @@ public class IncentiveService : IIncentiveService
         ));
         return new ApiResponse<IEnumerable<YtdMonthDto>>(true, dtos);
     }
+
+    public async Task<ApiResponse<IEnumerable<ProductBreakdownDto>>> GetByProductAsync(int advisorId, int? year = null, int? month = null)
+    {
+        var now = DateTime.Now;
+        var data = await _incRepo.GetSalesByProductAsync(advisorId, year ?? now.Year, month ?? now.Month);
+        var dtos = data.Select(d => new ProductBreakdownDto(
+            (string)d.Name,
+            (decimal)d.Value,
+            (string)d.Color
+        ));
+        return new ApiResponse<IEnumerable<ProductBreakdownDto>>(true, dtos);
+    }
+
+    public async Task<ApiResponse<IEnumerable<CampaignBreakdownDto>>> GetByCampaignAsync(int advisorId, int? year = null, int? month = null)
+    {
+        var now = DateTime.Now;
+        var data = await _incRepo.GetSalesByCampaignAsync(advisorId, year ?? now.Year, month ?? now.Month);
+        var dtos = data.Select(d => new CampaignBreakdownDto(
+            (string)d.Name,
+            (decimal)d.Value
+        ));
+        return new ApiResponse<IEnumerable<CampaignBreakdownDto>>(true, dtos);
+    }
 }
